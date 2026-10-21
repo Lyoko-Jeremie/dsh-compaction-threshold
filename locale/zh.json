@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "压缩阈值覆盖",
+    "description": "在运行时覆盖自动上下文压缩的压力阈值，无需重述 agent preset 声明。"
+  }
+}

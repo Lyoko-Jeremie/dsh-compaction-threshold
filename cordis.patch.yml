@@ -1,0 +1,8 @@
+# Inserts the runtime threshold override row. The row name resolves through the
+# profile that installs this bundle, and the plugin applies to every agent as it
+# is created. Override `thresholdRatio` from a profile patch, not here.
+- insert:
+    - id: compaction-threshold
+      name: 'dsh-compaction-threshold'
+      config:
+        thresholdRatio: 0.5

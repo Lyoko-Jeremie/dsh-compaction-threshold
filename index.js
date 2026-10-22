@@ -57,10 +57,29 @@ function overrideThreshold(engine, thresholdRatio, ctx) {
 }
 
 /**
+ * Resolve the basic compaction engine owned by one agent's preset mount.
+ *
+ * Agent presets mount their compaction backend inside an `isolate` realm, so
+ * the service is not visible from the agent's own scope; the preset registry
+ * exposes the implementation a mount owns. Compositions without a preset (or
+ * without the registry) keep the direct agent-scope lookup.
+ *
+ * @param {import('@deepseek-ai/cordis').Context} ctx - plugin context.
+ * @param {{ ctx: import('@deepseek-ai/cordis').Context }} agent - agent created by the loop.
+ * @returns {unknown} the engine when one is reachable.
+ */
+function resolveEngine(ctx, agent) {
+  const registry = agent.ctx.get('agentPresets') ?? ctx.get('agentPresets')
+  const presetEngine = registry?.serviceFor?.(agent, 'compaction')
+  if (isBasicEngine(presetEngine)) return presetEngine
+  return agent.ctx.get('compaction')
+}
+
+/**
  * Apply the threshold override to every agent created after this plugin loads.
  *
  * `agent/created` fires after the agent's preset generation mounted, so the
- * preset-owned `compaction` service is resolvable from the agent scope.
+ * preset-owned `compaction` service is reachable through the preset registry.
  *
  * @param {import('@deepseek-ai/cordis').Context} ctx - plugin context.
  * @param {{ thresholdRatio?: number }} [config] - row configuration.
@@ -76,7 +95,7 @@ export function apply(ctx, config = {}) {
   }
 
   ctx.on('agent/created', ({ agent }) => {
-    const engine = agent.ctx.get('compaction')
+    const engine = resolveEngine(ctx, agent)
     if (!isBasicEngine(engine)) {
       ctx.logger.debug('dsh-compaction-threshold: this preset exposes no basic compaction engine')
       return

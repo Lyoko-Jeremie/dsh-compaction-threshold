@@ -11,10 +11,12 @@ DeepSeek Harness 的 web profile 把 compaction backend 放进 agent preset 的 
 ## 工作原理
 
 1. 监听 `agent/created`（此时 agent 的 preset generation 已挂载）。
-2. 通过 `agent.ctx.get('compaction')` 取到该 preset 隔离域内的 compaction 服务。
+2. 通过 `agentPresets.serviceFor(agent, 'compaction')` 读取该 preset 的 `isolate` 域内 compaction 服务；没有 preset registry 或 registry 找不到该服务时，回退到 `agent.ctx.get('compaction')`。
 3. 用**结构判断**识别 `dsh-compaction-basic` 的引擎（检查已解析 config 上是否有数值型 `thresholdRatio`），因此不依赖模块身份，也不会引入第二份引擎包副本。
 4. 引擎的 `config` 被 `deepFreeze` 过，因此整体替换实例属性 `config`，而不是就地修改冻结对象。
 5. 不修改任何 preset 声明或现有配置文件。
+
+> 为什么不能只用 `agent.ctx.get('compaction')`：shipped preset 把 compaction group 声明为 `isolate: { compaction: true }`，服务注册在该 group 私有 realm 的符号下，父级 agent 作用域按根符号查找会得到 `undefined`。`agentPresets.serviceFor(agent, name)` 是 preset registry 提供的、能读到 mount 所拥有的服务实现的入口。
 
 ## 安装
 
@@ -69,6 +71,7 @@ thresholdTokens = min(contextWindow × thresholdRatio,
 - 启动日志出现 `dsh-compaction-threshold: pressure threshold set to 0.5`。
 - 用量接近阈值时出现 `compaction (step pressure)` 日志。
 - 若 preset 内没有 basic 引擎（例如换了其他压缩后端），插件会记录 debug 日志并跳过。
+- 在 `isolate` preset 下，`agent.ctx.get('compaction')` 返回 `undefined` 属正常现象，插件会改走 preset registry；只有 registry 也取不到引擎时才跳过。
 
 ## 限制与风险
 
@@ -76,6 +79,7 @@ thresholdTokens = min(contextWindow × thresholdRatio,
 - 手动 `/compact` 与自动压缩共用这份配置，因此也会使用覆盖后的阈值。
 - 只对插件加载后创建的 agent 生效；HMR 重载后，新会话才会应用。
 - 依赖 `BasicCompactionEngine.config` 这一实例属性形态（`public readonly`，仅类型层只读）。harness 内部结构变化时，插件会记录 warning 并保持原阈值，不会中断会话。
+- 依赖 `@deepseek-ai/dsh-agent-preset-registry` 的 `agentPresets.serviceFor(agent, name)` 读取 preset 隔离域内的服务；registry 缺失或改名时回退到 `agent.ctx.get('compaction')`，在 `isolate` preset 下即不再生效。
 - 绕过 `resolveConfig` 的启动期校验；插件自行校验 `(0, 1]` 范围，并提示 `retainRatio` 冲突。
 - 这是非官方扩展方式，不属于 Harness 文档化的扩展点。
 

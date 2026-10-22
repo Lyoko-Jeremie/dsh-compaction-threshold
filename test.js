@@ -3,10 +3,11 @@ import test from 'node:test'
 import { apply } from './index.js'
 
 /** Build a minimal Cordis-like context that records listeners and log lines. */
-function createHarness() {
+function createHarness({ registry } = {}) {
   const listeners = []
   const logs = { info: [], warn: [], debug: [] }
   const ctx = {
+    get: (name) => (name === 'agentPresets' ? registry : undefined),
     on(name, listener) {
       listeners.push({ name, listener })
       return () => {}
@@ -20,9 +21,17 @@ function createHarness() {
   return { ctx, listeners, logs }
 }
 
-/** Build an agent whose scope resolves one compaction service. */
-function createAgent(engine) {
-  return { ctx: { get: (name) => (name === 'compaction' ? engine : undefined) } }
+/** Build an agent whose scope resolves one compaction service and an optional preset registry. */
+function createAgent(engine, registry) {
+  return {
+    ctx: {
+      get: (name) => {
+        if (name === 'compaction') return engine
+        if (name === 'agentPresets') return registry
+        return undefined
+      },
+    },
+  }
 }
 
 /** Build a frozen resolved config shaped like the basic engine's. */
@@ -81,6 +90,24 @@ test('skips presets without a basic compaction engine', () => {
   listeners[0].listener({ agent: createAgent({}) })
   assert.equal(logs.debug.length, 2)
   assert.equal(logs.warn.length, 0)
+})
+
+test('reads an isolated preset engine through the agent-scope registry', () => {
+  const { ctx, listeners } = createHarness()
+  apply(ctx, { thresholdRatio: 0.5 })
+  const engine = createEngine()
+  const registry = { serviceFor: (_agent, name) => (name === 'compaction' ? engine : undefined) }
+  listeners[0].listener({ agent: createAgent(undefined, registry) })
+  assert.equal(engine.config.thresholdRatio, 0.5)
+})
+
+test('falls back to the plugin-context registry when the agent scope has none', () => {
+  const engine = createEngine()
+  const registry = { serviceFor: (_agent, name) => (name === 'compaction' ? engine : undefined) }
+  const { ctx, listeners } = createHarness({ registry })
+  apply(ctx, { thresholdRatio: 0.5 })
+  listeners[0].listener({ agent: createAgent(undefined) })
+  assert.equal(engine.config.thresholdRatio, 0.5)
 })
 
 test('rejects ratios outside (0, 1] at load', () => {

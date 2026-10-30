@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Compaction Threshold",
-    "description": "Overrides the automatic context-compaction pressure threshold at runtime, without restating agent preset declarations."
+    "description": "Overrides the automatic context-compaction pressure threshold at runtime, and adds an editable setting for it on the plugin's configuration page."
   }
 }
